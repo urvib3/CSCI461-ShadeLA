@@ -1,32 +1,46 @@
-import geopandas as gpd
+import requests
 import json
-import os
+import time
 
-# Path to your dataset
-DATA_PATH = "data/la_hospitals_clinics.geojson"
+BASE_URL = "https://public.gis.lacounty.gov/public/rest/services/LACounty_Dynamic/LMS_Data_Public/MapServer/77/query"
 
-def load_hospitals():
-    if not os.path.exists(DATA_PATH):
-        print(" Error: Hospital dataset not found at", DATA_PATH)
-        return
-    
-    try:
-        # Load the GeoJSON file using GeoPandas
-        hospitals = gpd.read_file(DATA_PATH)
+params = {
+    "where": "1=1",
+    "outFields": "*",
+    "returnGeometry": "true",
+    "f": "json",
+    "resultOffset": 0,
+    "resultRecordCount": 2000
+}
 
-        print("Successfully loaded Hospitals and Clinics dataset.")
-        print(f"Total records: {len(hospitals)}")
+all_features = []
+batch = 0
 
-        # Show the first few rows and columns for inspection
-        print(hospitals.head())
+while True:
+    print(f"Fetching batch {batch} (offset={params['resultOffset']})...")
+    response = requests.get(BASE_URL, params=params)
+    if response.status_code != 200:
+        print("Error:", response.text)
+        break
 
-        # Optionally export a simplified sample for teammates
-        sample_path = "data/sample_hospitals.geojson"
-        hospitals.head(5).to_file(sample_path, driver="GeoJSON")
-        print(f" Sample saved to {sample_path}")
+    data = response.json()
+    features = data.get("features", [])
+    if not features:
+        print("No more data.")
+        break
 
-    except Exception as e:
-        print(" Error loading dataset:", e)
+    all_features.extend(features)
+    params["resultOffset"] += params["resultRecordCount"]
+    batch += 1
+    time.sleep(0.3)
 
-if __name__ == "__main__":
-    load_hospitals()
+geojson_data = {
+    "type": "FeatureCollection",
+    "features": all_features
+}
+
+output_path = "data/la_hospitals_clinics_live.geojson"
+with open(output_path, "w") as f:
+    json.dump(geojson_data, f)
+
+print(f"✅ Saved {len(all_features)} records to {output_path}")
