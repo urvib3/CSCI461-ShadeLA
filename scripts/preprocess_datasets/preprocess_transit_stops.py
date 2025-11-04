@@ -5,8 +5,8 @@ from shapely.geometry import Point
 import os
 
 # --- Paths ---
-input_path = "data/la_major_transit_stops.geojson"
-output_dir = "preprocessed"
+input_path = "data/raw/la_major_transit_stops.geojson"
+output_dir = "data/preprocessed"
 output_path = os.path.join(output_dir, "la_metro_transit_stops_dtla.geojson")
 os.makedirs(output_dir, exist_ok=True)
 
