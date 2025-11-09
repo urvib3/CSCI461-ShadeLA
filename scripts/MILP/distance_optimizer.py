@@ -38,6 +38,18 @@ def optimize_shade_placement(candidate_points, public_points, max_shades=15, spa
         for j in range(p):
             public_dists[i, j] = candidate_points.geometry.iloc[i].distance(public_points.geometry.iloc[j])
 
+    # calculates how valuable each bus stop is when considering proximity to public services
+    # encourages both threshold coverage of + closeness to public services
+    # adding the 1 encourages general coverage and the the subtraction term penalizes shades that are relatively far from the public services they cover
+    public_dist_coverage = np.zeros(n)
+    public_service_distance_weighting = 0.2     # A higher value means that we care a lot about how close the service is to the public facility. A lower value means that we just care if it is covered under the public_facility_threshold.
+    for i in range(n): 
+        public_dist_coverage[i] = sum(
+            (1 - (d/public_service_threshold*public_service_distance_weighting))
+            for d in public_dists[i] 
+            if d < public_service_threshold
+        )
+
     # --- PRINT STATISTICS ---
     upper_tri = dist_matrix[np.triu_indices(n, k=1)]
     dist_stats = (
@@ -63,15 +75,8 @@ def optimize_shade_placement(candidate_points, public_points, max_shades=15, spa
         -1 + (dist_matrix[i, j] / spacing_threshold)
         for (i, j) in y.keys() if y[(i, j)] and dist_matrix[i, j] < spacing_threshold
     ])
-
-    # encourage closeness to public buildings (minimize distance)
-    public_service_distance_weighting = 0.2     # A higher value means that we care a lot about how close the service is to the public facility. A lower value means that we just care if it is covered under the public_facility_threshold.
-    public_proximity_term = lpSum([
-        x[i] * (1 - (d/public_service_threshold*public_service_distance_weighting))
-        for i in range(n)
-        for d in public_dists[i] 
-        if d < public_service_threshold
-    ])
+  
+    
 
     # --- CONSTRUCT MODEL ---
     
@@ -90,20 +95,48 @@ def optimize_shade_placement(candidate_points, public_points, max_shades=15, spa
     objective = 0
     if use_spacing: 
         objective += 1.0 * spacing_term
-    if use_public: 
-        objective += 1.0 * public_proximity_term
-    if use_heat: 
+
+    if use_public:         # encourage closeness to public buildings (minimize distance)
+        # normalize terms to [0,1]
+        public_dist_coverage = (public_dist_coverage - np.min(public_dist_coverage)) / (np.max(public_dist_coverage) - np.min(public_dist_coverage) + 1e-8)
+        assert np.min(public_dist_coverage) >= 0 and np.max(public_dist_coverage) <= 1, \
+        f"Normalization error: min={np.min(public_dist_coverage)}, max={np.max(public_dist_coverage)}"
+
+        # add public proximity term
+        public_proximity_term = lpSum([
+            x[i] * public_dist_coverage[i] 
+            for i in range(len(candidate_points))
+        ])
+        objective += 0.1 * public_proximity_term
+
+    if use_heat:            # encourage shades in areas with high heat indexes
+        # normalize terms to [0,1]
+        heat_values = candidate_points.heat_layer
+        heat_values = (heat_values - heat_values.min()) / (heat_values.max() - heat_values.min() + 1e-8)
+        assert np.min(heat_values) >= 0 and np.max(heat_values) <= 1, \
+            f"Heat normalization error: min={np.min(heat_values)}, max={np.max(heat_values)}"
+
+        # add heat term
         heat_term = lpSum([
-            x[i] * candidate_points.heat_layer.iloc[i] 
+            x[i] * heat_values.iloc[i] 
             for i in range(len(candidate_points))
         ])
-        objective += 1.0 * heat_term
-    if use_socioeconomic: 
+        objective += 0.02 * heat_term
+
+    if use_socioeconomic:   # encourage shades in areas with low socioeconomic status
+        # normalize terms to [0,1]
+        socio_values = candidate_points.socioeconomic_layer
+        socio_values = (socio_values - socio_values.min()) / (socio_values.max() - socio_values.min() + 1e-8)
+        assert np.min(socio_values) >= 0 and np.max(socio_values) <= 1, \
+            f"Socioeconomic normalization error: min={np.min(socio_values)}, max={np.max(socio_values)}"
+
+        # add socioeconomic term
         socio_term = lpSum([
-            x[i] * candidate_points.socioeconomic_layer.iloc[i] 
+            x[i] * socio_values.iloc[i] 
             for i in range(len(candidate_points))
         ])
-        objective += 1.0 * socio_term
+
+        objective += 0.02 * socio_term
     model += objective
 
     # --- SOLVE ---
