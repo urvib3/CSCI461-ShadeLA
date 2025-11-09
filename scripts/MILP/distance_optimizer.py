@@ -4,7 +4,7 @@ import itertools
 import sys
 from pulp import LpProblem, LpVariable, LpMaximize, lpSum, LpBinary, PULP_CBC_CMD
 
-def optimize_shade_placement(candidate_points, public_points, max_shades=15, spacing_threshold=300, public_service_threshold=300, use_spacing=True, use_public=True, use_heat=False, use_socioeconomic=False):
+def optimize_shade_placement(candidate_points, public_points, max_shades=15, spacing_threshold=300, public_service_threshold=300, use_spacing=True, use_public=True, use_heat=True, use_socioeconomic=True):
     """
     MILP to select shade locations:
     - maximize coverage near public buildings (schools, hospitals, food)
@@ -91,13 +91,23 @@ def optimize_shade_placement(candidate_points, public_points, max_shades=15, spa
     if use_spacing: 
         objective += 1.0 * spacing_term
     if use_public: 
-        objective += 3.0 * public_proximity_term
+        objective += 1.0 * public_proximity_term
+    if use_heat: 
+        heat_term = lpSum([
+            x[i] * candidate_points.heat_layer.iloc[i] 
+            for i in range(len(candidate_points))
+        ])
+        objective += 1.0 * heat_term
+    if use_socioeconomic: 
+        socio_term = lpSum([
+            x[i] * candidate_points.socioeconomic_layer.iloc[i] 
+            for i in range(len(candidate_points))
+        ])
+        objective += 1.0 * socio_term
     model += objective
-    #Prioritize accessibility for community facilities = 3, we can lower it
 
     # --- SOLVE ---
     model.solve(PULP_CBC_CMD(msg=True))
-    
 
     # Selected shades
     selected_idx = [i for i in range(n) if x[i].value() == 1]
