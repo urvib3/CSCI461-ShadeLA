@@ -1,0 +1,65 @@
+==========================================
+SLURM_JOB_ID = 4733433
+SLURM_JOB_NODELIST = d05-37
+TMPDIR = /tmp/SLURM_4733433
+==========================================
+Index(['STOPNUM', 'STOPNAME', 'LAT', 'LONG', 'LINE_DIR1', 'LINE_DIR2',
+       'LINE_DIR3', 'LINE_DIR4', 'LINE_DIR5', 'LINE_DIR6', 'LINE_DIR7',
+       'LINE_DIR8', 'LINE_DIR9', 'LINE_DIR10', 'LINE_DIR11', 'LINE_DIR12',
+       'LINE_DIR13', 'LINE_DIR14', 'layer_id', 'feature_name', 'geometry',
+       'heat_layer', 'index_right', 'socioeconomic_layer'],
+      dtype='object')
+n:  675  p:  94
+dist_stats:  Candidate distances stats (upper tri) — min: 7.09 m, max: 8974.86 m, mean: 3017.75 m, median: 2910.77 m
+ 
+public_stats:  Public distances stats — min: 13.44 m, max: 9016.71 m, mean: 3022.23 m, median: 2874.79 m
+
+Welcome to the CBC MILP Solver 
+Version: 2.10.3 
+Build Date: Dec 15 2019 
+
+command line - /scratch1/ubhuwani/miniconda3/envs/shade_la_env/lib/python3.9/site-packages/pulp/apis/../solverdir/cbc/linux/i64/cbc /tmp/SLURM_4733433/f5502c54a7dc41b8b04ff728fce282f7-pulp.mps -max -timeMode elapsed -branch -printingOptions all -solution /tmp/SLURM_4733433/f5502c54a7dc41b8b04ff728fce282f7-pulp.sol (default strategy 1)
+At line 2 NAME          MODEL
+At line 3 ROWS
+At line 682431 COLUMNS
+At line 2732407 RHS
+At line 3414834 BOUNDS
+At line 3642985 ENDATA
+Problem MODEL has 682426 rows, 228150 columns and 1593000 elements
+Coin0008I MODEL read with 0 errors
+Option for timeMode changed from cpu to elapsed
+Continuous objective value is 3.97308 - 1.44 seconds
+Cgl0004I processed model has 682426 rows, 228150 columns (228150 integer (228150 of which binary)) and 1593000 elements
+Cbc0038I Initial state - 0 integers unsatisfied sum - 0
+Cbc0038I Solution found of -3.97308
+Cbc0038I Before mini branch and bound, 228150 integers at bound fixed and 0 continuous
+Cbc0038I Mini branch and bound did not improve solution (53.18 seconds)
+Cbc0038I After 53.21 seconds - Feasibility pump exiting with objective of -3.97308 - took 0.89 seconds
+Cbc0012I Integer solution of -3.973082 found by feasibility pump after 0 iterations and 0 nodes (53.45 seconds)
+Cbc0001I Search completed - best objective -3.973082015061909, took 0 iterations and 0 nodes (54.12 seconds)
+Cbc0035I Maximum depth 0, 0 variables fixed on reduced cost
+Cuts at root node changed objective from -3.97308 to -3.97308
+Probing was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+Gomory was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+Knapsack was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+Clique was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+MixedIntegerRounding2 was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+FlowCover was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+TwoMirCuts was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+ZeroHalf was tried 0 times and created 0 cuts of which 0 were active after adding rounds of cuts (0.000 seconds)
+
+Result - Optimal solution found
+
+Objective value:                3.97308202
+Enumerated nodes:               0
+Total iterations:               0
+Time (CPU seconds):             53.41
+Time (Wallclock seconds):       55.47
+
+Option for printingOptions changed from normal to all
+Total time (CPU seconds):       55.45   (Wallclock seconds):       57.71
+
+Shade pairs closer than threshold: 113
+Public facilities covered by selected shades: 162
+Selected 50 optimal shade sites.
+Saved 50 optimized shade locations to ../../data/optimized_shades.geojson
