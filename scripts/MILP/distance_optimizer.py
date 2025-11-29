@@ -75,7 +75,6 @@ def optimize_shade_placement(candidate_points, public_points, max_shades=15, spa
         -1 + (dist_matrix[i, j] / spacing_threshold)
         for (i, j) in y.keys() if y[(i, j)] and dist_matrix[i, j] < spacing_threshold
     ])
-  
     
 
     # --- CONSTRUCT MODEL ---
