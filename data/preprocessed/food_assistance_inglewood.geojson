@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "food_assistance_inglewood",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "OBJECTID": "7594", "source": "211", "ext_id": "3,173,993", "cat1": "Social Services", "cat2": "Food Assistance", "cat3": "", "org_name": "NULL", "name": "Food Pantry Lax Area", "addrln1": "355 E. Beach Ave.", "addrln2": "", "city": "Inglewood", "state": "CA", "hours": "", "phones": "Service/Intake and Administration (310) 677-5597", "email": "", "url": "", "info1": "", "info2": "", "post_id": "3,173,993.00", "description": "The agency provides emergency food to people who live in El Segundo, Hawthorne, Inglewood, Lawndale and Los Angeles zip codes 90001, 90002, 90003, 90006, 90007, 90008, 90011, 90013, 90016, 90018, 90019, 90037, 90043, 90044, 90045, 90047, 90056, 90059, 90061, 90062, 90245, 90247, 90249, 90250, 90260, 90293, 90301, 90302, 90303, 90304 and 90305.", "zip": "90302", "link": "", "use_type": "publish", "latitude": "33.97", "longitude": "-118.35", "date_updated": "July 14, 2020", "dis_status": "", "POINT_X": "6,455,519.41", "POINT_Y": "1,811,272.76", "allcats": "|Social Services|Food Assistance|", "nameUrlFriendly": "food-pantry-lax-area", "isCounty": "0", "tags": "" }, "geometry": { "type": "Point", "coordinates": [ -118.35008700023414, 33.968969999787433 ] } }
+]
+}
