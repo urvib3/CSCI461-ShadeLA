@@ -4,7 +4,7 @@ import itertools
 import sys
 from pulp import LpProblem, LpVariable, LpMaximize, lpSum, LpBinary, PULP_CBC_CMD
 
-def optimize_shade_placement(candidate_points, public_points, max_shades=15, spacing_threshold=300, public_service_threshold=300, use_spacing=True, use_public=True, use_heat=True, use_socioeconomic=True):
+def optimize_shade_placement(candidate_points, public_points, max_shades=15, spacing_threshold=500, public_service_threshold=300, use_spacing=True, use_public=True, use_heat=True, use_socioeconomic=True):
     """
     MILP to select shade locations:
     - maximize coverage near public buildings (schools, hospitals, food)
@@ -69,14 +69,6 @@ def optimize_shade_placement(candidate_points, public_points, max_shades=15, spa
     print("dist_stats: ", dist_stats, "\npublic_stats: ", public_stats)
     sys.stdout.flush()
 
-    # --- OBJECTIVE ---
-    # encourage spacing (maximize distance between selected pairs)
-    spacing_term = lpSum([
-        -1 + (dist_matrix[i, j] / spacing_threshold)
-        for (i, j) in y.keys() if y[(i, j)] and dist_matrix[i, j] < spacing_threshold
-    ])
-    
-
     # --- CONSTRUCT MODEL ---
     
     model = LpProblem("Shade_Placement", LpMaximize)
@@ -92,8 +84,19 @@ def optimize_shade_placement(candidate_points, public_points, max_shades=15, spa
 
     # OBJECTIVES
     objective = 0
+
+    # objective weights
+    spacing_weight = 1.0
+    public_weight = 0.1
+    heat_weight = 0.02
+    socioeconomic_weight = 0.02
     if use_spacing: 
-        objective += 1.0 * spacing_term
+        # encourage spacing (maximize distance between selected pairs)
+        spacing_term = lpSum([
+            y[(i,j)] * (-2 + (dist_matrix[i, j] / spacing_threshold))
+            for (i, j) in y.keys() if dist_matrix[i, j] < spacing_threshold
+        ])
+        objective += spacing_weight * spacing_term
 
     if use_public:         # encourage closeness to public buildings (minimize distance)
         # normalize terms to [0,1]
@@ -106,7 +109,7 @@ def optimize_shade_placement(candidate_points, public_points, max_shades=15, spa
             x[i] * public_dist_coverage[i] 
             for i in range(len(candidate_points))
         ])
-        objective += 0.1 * public_proximity_term
+        objective += public_weight * public_proximity_term
 
     if use_heat:            # encourage shades in areas with high heat indexes
         # normalize terms to [0,1]
@@ -120,7 +123,7 @@ def optimize_shade_placement(candidate_points, public_points, max_shades=15, spa
             x[i] * heat_values.iloc[i] 
             for i in range(len(candidate_points))
         ])
-        objective += 0.02 * heat_term
+        objective += heat_weight * heat_term
 
     if use_socioeconomic:   # encourage shades in areas with low socioeconomic status
         # normalize terms to [0,1]
@@ -135,7 +138,7 @@ def optimize_shade_placement(candidate_points, public_points, max_shades=15, spa
             for i in range(len(candidate_points))
         ])
 
-        objective += 0.02 * socio_term
+        objective += socioeconomic_weight * socio_term
     model += objective
 
     # --- SOLVE ---

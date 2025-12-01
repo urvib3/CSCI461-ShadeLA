@@ -67,6 +67,77 @@ def select_top_by_heat_socio(candidate_points: gpd.GeoDataFrame, k: int) -> gpd.
     k = min(k, len(candidates))
     return candidates.sort_values('heat_socio_layer', ascending=False).head(k)
 
+#greedy by heat + socioeconomic score; no spacing, no public access
+def select_top_by_heat_socio_public(
+        candidate_points: gpd.GeoDataFrame, 
+        public_points: np.ndarray, 
+        public_service_threshold: float, 
+        k: int
+    ) -> gpd.GeoDataFrame:
+    
+    # Extract the heat socio layer
+    if 'heat_socio_layer' not in candidate_points.columns:
+        # Fallback if column doesn't exist
+        hs = candidate_points['heat_layer'].fillna(0) + candidate_points['socioeconomic_layer'].fillna(0)
+        candidates = candidate_points.copy()
+        candidates['heat_socio_layer'] = hs
+    else:
+        candidates = candidate_points
+    heat_socio_values = candidate_points.heat_layer
+    heat_socio_norm = (heat_socio_values - heat_socio_values.min()) / (heat_socio_values.max() - heat_socio_values.min() + 1e-8)
+        
+    # Extract the public norm layer
+    public_dists = _compute_public_dist_matrix(candidate_points, public_points) if len(public_points) > 0 else np.zeros((n, 0))
+    public_gain = _compute_public_gain(public_dists, public_service_threshold)
+    # Normalize public gain
+    if np.max(public_gain) > 0:
+        public_gain_norm = (public_gain - np.min(public_gain)) / (np.max(public_gain) - np.min(public_gain) + 1e-8)
+    else:
+        public_gain_norm = np.zeros_like(public_gain)
+
+    # Combine the two normalized layers
+    k = min(k, len(candidates))
+    candidates['heat_socio_public_layer'] = heat_socio_norm + public_gain_norm
+    return candidates.sort_values('heat_socio_public_layer', ascending=False).head(k)
+
+#greedy by heat + socioeconomic score; no spacing, no public access
+def select_top_by_public(
+    candidate_points: gpd.GeoDataFrame,  
+    public_points: np.ndarray, 
+    public_service_threshold: float, 
+    k: int,
+) -> gpd.GeoDataFrame:
+
+    n = len(candidate_points)
+    if n == 0 or k <= 0:
+        return candidate_points.iloc[[]]
+    
+    public_dists = _compute_public_dist_matrix(candidate_points, public_points) if len(public_points) > 0 else np.zeros((n, 0))
+    public_gain = _compute_public_gain(public_dists, public_service_threshold)
+    # Normalize public gain
+    if np.max(public_gain) > 0:
+        public_gain_norm = (public_gain - np.min(public_gain)) / (np.max(public_gain) - np.min(public_gain) + 1e-8)
+    else:
+        public_gain_norm = np.zeros_like(public_gain)
+
+    # ---- Select top-k candidates by public gain ----
+    top_idx = np.argsort(-public_gain_norm)[:k]   # descending sort
+    return candidate_points.iloc[top_idx]
+
+
+#greedy by heat; no spacing, no public access, no socioeconomic layer
+def select_top_by_heat(candidates: gpd.GeoDataFrame, k: int) -> gpd.GeoDataFrame:
+    if 'heat_layer' not in candidates.columns:
+        raise NotImplementedError("You need to add a 'heat_layer' column to candidate_points to use this baseline.")
+    k = min(k, len(candidates))
+    return candidates.sort_values('heat_layer', ascending=False).head(k)
+
+#greedy by socio layer; no spacing, no public access, no heat layer
+def select_top_by_socio(candidates: gpd.GeoDataFrame, k: int) -> gpd.GeoDataFrame:
+    if 'socioeconomic_layer' not in candidates.columns:
+        raise NotImplementedError("You need to add a 'socioeconomic_layer' column to candidate_points to use this baseline.")
+    k = min(k, len(candidates))
+    return candidates.sort_values('socioeconomic_layer', ascending=False).head(k)
 
 def select_greedy(
     candidate_points: gpd.GeoDataFrame,
@@ -206,11 +277,17 @@ def compute_metrics(
         return {
             'count': 0,
             'sum_heat_socio': 0.0,
+            'sum_heat': 0.0,
+            'sum_socio': 0.0,
             'top_decile_hits': 0,
             'top_decile_total': int(np.ceil(0.1 * len(candidates))) if len(candidates) > 0 else 0,
             'public_access_score': 0.0,
             'close_pairs': 0,
         }
+    
+    # Sum heat and socio layers
+    sum_heat = float(selected['heat_layer'].fillna(0).sum())
+    sum_socio = float(selected['socioeconomic_layer'].fillna(0).sum())
 
     # Sum heat + socio
     if 'heat_socio_layer' in candidates.columns:
@@ -240,6 +317,8 @@ def compute_metrics(
 
     return {
         'count': int(len(selected)),
+        'sum_heat': float(sum_heat),
+        'sum_socio': float(sum_socio),
         'sum_heat_socio': float(sum_heat_socio),
         'top_decile_hits': int(hits),
         'top_decile_total': int(k_dec),
