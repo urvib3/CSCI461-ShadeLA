@@ -1,0 +1,15 @@
+
+=== Comparison Metrics (MILP vs Greedy vs Baselines) ===
+Top-K Heat       : n=10,heat_sum=74.28, socio_sum=37.40,heat_socio_sum=111.68, top-decile hits=10/23, public_access=5.98, close_pairs<500m=5
+Top-K Socio      : n=10,heat_sum=28.00, socio_sum=46.31,heat_socio_sum=74.32, top-decile hits=5/23, public_access=7.76, close_pairs<500m=6
+Top-K Public     : n=10,heat_sum=34.90, socio_sum=42.53,heat_socio_sum=77.43, top-decile hits=2/23, public_access=34.46, close_pairs<500m=9
+Top-K HS         : n=10,heat_sum=72.28, socio_sum=44.37,heat_socio_sum=116.65, top-decile hits=10/23, public_access=7.77, close_pairs<500m=8
+Top-K HSP        : n=10,heat_sum=42.70, socio_sum=40.83,heat_socio_sum=83.53, top-decile hits=4/23, public_access=32.68, close_pairs<500m=7
+MILP-Heat        : n=10,heat_sum=74.28, socio_sum=37.40,heat_socio_sum=111.68, top-decile hits=10/23, public_access=8.69, close_pairs<500m=4
+MILP-Socio       : n=10,heat_sum=28.00, socio_sum=46.31,heat_socio_sum=74.32, top-decile hits=5/23, public_access=6.91, close_pairs<500m=5
+MILP-Public      : n=10,heat_sum=34.90, socio_sum=42.53,heat_socio_sum=77.43, top-decile hits=2/23, public_access=34.46, close_pairs<500m=9
+MILP-HSP         : n=10,heat_sum=34.90, socio_sum=42.53,heat_socio_sum=77.43, top-decile hits=2/23, public_access=34.46, close_pairs<500m=9
+MILP             : n=10,heat_sum=41.17, socio_sum=39.82,heat_socio_sum=80.99, top-decile hits=2/23, public_access=27.64, close_pairs<500m=0
+Greedy           : n=10,heat_sum=41.17, socio_sum=39.82,heat_socio_sum=80.99, top-decile hits=2/23, public_access=27.64, close_pairs<500m=0
+Greedy-Heat      : n=10,heat_sum=72.99, socio_sum=37.87,heat_socio_sum=110.85, top-decile hits=10/23, public_access=6.11, close_pairs<500m=0
+Random           : n=10,heat_sum=-17.35, socio_sum=34.36,heat_socio_sum=17.01, top-decile hits=0/23, public_access=7.71, close_pairs<500m=2
