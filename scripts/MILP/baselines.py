@@ -2,58 +2,10 @@ import numpy as np
 import geopandas as gpd
 import pandas as pd
 from typing import Dict, List, Tuple
+from MILP.utils import _compute_distance_matrix, _compute_public_dist_matrix, _compute_public_gain, select_random
 
 # Greedy + Baselines and evaluation utilities for shade placement
 # Assumes input GeoDataFrames are in a projected CRS in meters (e.g., EPSG:3857)
-
-def _compute_distance_matrix(geom: gpd.GeoSeries) -> np.ndarray:
-    n = len(geom)
-    dist = np.zeros((n, n), dtype=float)
-    # Compute upper triangle distances and mirror
-    for i in range(n):
-        gi = geom.iloc[i]
-        for j in range(i + 1, n):
-            d = gi.distance(geom.iloc[j])
-            dist[i, j] = d
-            dist[j, i] = d
-    return dist
-
-
-def _compute_public_dist_matrix(candidates: gpd.GeoDataFrame, public_points: gpd.GeoDataFrame) -> np.ndarray:
-    n = len(candidates)
-    p = len(public_points)
-    public_dists = np.zeros((n, p), dtype=float)
-    for i in range(n):
-        gi = candidates.geometry.iloc[i]
-        for j in range(p):
-            public_dists[i, j] = gi.distance(public_points.geometry.iloc[j])
-    return public_dists
-
-
-def _compute_public_gain(public_dists: np.ndarray, public_service_threshold: float, weighting: float = 0.2) -> np.ndarray:
-    """Distance-weighted access to public facilities (same shape as in MILP objective).
-    Sum over facilities within threshold of (1 - (d/threshold * weighting)).
-    """
-    n = public_dists.shape[0]
-    gain = np.zeros(n, dtype=float)
-    if n == 0:
-        return gain
-    for i in range(n):
-        di = public_dists[i]
-        mask = di < public_service_threshold
-        if np.any(mask):
-            gain[i] = float(np.sum(1 - (di[mask] / public_service_threshold * weighting)))
-        else:
-            gain[i] = 0.0
-    return gain
-
-
-def select_random(candidate_points: gpd.GeoDataFrame, k: int, seed: int = 0) -> gpd.GeoDataFrame:
-    rng = np.random.default_rng(seed)
-    n = len(candidate_points)
-    k = min(k, n)
-    idx = rng.choice(n, size=k, replace=False)
-    return candidate_points.iloc[np.sort(idx)]
 
 #greedy by heat + socioeconomic score; no spacing, no public access
 def select_top_by_heat_socio(candidate_points: gpd.GeoDataFrame, k: int) -> gpd.GeoDataFrame:
@@ -156,8 +108,8 @@ def select_greedy(
         # Inspired by MILP coefficients; tune as needed
         weights = {
             'public': 0.1,
-            'heat': 0.02,
-            'socio': 0.02,
+            'heat': 0.1,
+            'socio': 0.1,
             'spacing': 1.0,
         }
 
@@ -262,66 +214,3 @@ def select_greedy_heat_only(
         remaining.remove(best_i)
 
     return candidate_points.iloc[selected]
-
-
-def compute_metrics(
-    selected: gpd.GeoDataFrame,
-    candidates: gpd.GeoDataFrame,
-    public_points: gpd.GeoDataFrame,
-    spacing_threshold: float = 500.0,
-    public_service_threshold: float = 300.0,
-    public_weighting: float = 0.2,
-) -> Dict[str, float]:
-    # Safety if empty
-    if len(selected) == 0:
-        return {
-            'count': 0,
-            'sum_heat_socio': 0.0,
-            'sum_heat': 0.0,
-            'sum_socio': 0.0,
-            'top_decile_hits': 0,
-            'top_decile_total': int(np.ceil(0.1 * len(candidates))) if len(candidates) > 0 else 0,
-            'public_access_score': 0.0,
-            'close_pairs': 0,
-        }
-    
-    # Sum heat and socio layers
-    sum_heat = float(selected['heat_layer'].fillna(0).sum())
-    sum_socio = float(selected['socioeconomic_layer'].fillna(0).sum())
-
-    # Sum heat + socio
-    if 'heat_socio_layer' in candidates.columns:
-        sum_heat_socio = float(selected['heat_socio_layer'].fillna(0).sum())
-    else:
-        sum_heat_socio = float((selected['heat_layer'].fillna(0) + selected['socioeconomic_layer'].fillna(0)).sum())
-
-    # Top decile coverage
-    if 'heat_socio_layer' in candidates.columns:
-        hs_all = candidates['heat_socio_layer'].fillna(0)
-    else:
-        hs_all = (candidates['heat_layer'].fillna(0) + candidates['socioeconomic_layer'].fillna(0))
-    k_dec = max(1, int(np.ceil(0.1 * len(candidates))))
-    top_decile_idx = hs_all.sort_values(ascending=False).head(k_dec).index
-    hits = len(set(selected.index).intersection(set(top_decile_idx)))
-
-    # Public access distance-weighted score
-    public_dists = _compute_public_dist_matrix(candidates, public_points) if len(public_points) > 0 else np.zeros((len(candidates), 0))
-    public_gain_all = _compute_public_gain(public_dists, public_service_threshold, weighting=public_weighting)
-    public_access_score = float(public_gain_all[selected.index].sum())
-
-    # Spacing: number of close pairs in the selected set
-    sel_geom = selected.geometry.reset_index(drop=True)
-    dist_sel = _compute_distance_matrix(sel_geom)
-    triu = np.triu_indices(len(selected), k=1)
-    close_pairs = int(np.sum(dist_sel[triu] < spacing_threshold))
-
-    return {
-        'count': int(len(selected)),
-        'sum_heat': float(sum_heat),
-        'sum_socio': float(sum_socio),
-        'sum_heat_socio': float(sum_heat_socio),
-        'top_decile_hits': int(hits),
-        'top_decile_total': int(k_dec),
-        'public_access_score': float(public_access_score),
-        'close_pairs': int(close_pairs),
-    }

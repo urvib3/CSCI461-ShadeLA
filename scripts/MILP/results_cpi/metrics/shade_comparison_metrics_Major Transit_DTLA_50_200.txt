@@ -1,0 +1,14 @@
+
+=== Comparison Metrics (MILP vs Greedy vs Baselines) ===
+Top-K Heat       : n=50,heat_sum=274.10, socio_sum=197.03,heat_socio_sum=471.14, top-decile hits=23/23, public_access=26.53, close_pairs<500m=79, area_coverage=10980759.94, heat_coverage=58235028.92, socio_coverage=42000694.99
+Top-K Socio      : n=50,heat_sum=210.17, socio_sum=212.18,heat_socio_sum=422.35, top-decile hits=18/23, public_access=25.04, close_pairs<500m=68, area_coverage=11369547.50, heat_coverage=45680308.85, socio_coverage=46360365.52
+Top-K Public     : n=50,heat_sum=35.55, socio_sum=179.88,heat_socio_sum=215.42, top-decile hits=8/23, public_access=55.86, close_pairs<500m=57, area_coverage=13434283.37, heat_coverage=18633192.90, socio_coverage=48524295.55
+Top-K HS         : n=50,heat_sum=270.37, socio_sum=201.87,heat_socio_sum=472.24, top-decile hits=23/23, public_access=27.39, close_pairs<500m=77, area_coverage=11464450.16, heat_coverage=60058357.94, socio_coverage=44545501.33
+Top-K HSP        : n=50,heat_sum=243.66, socio_sum=196.30,heat_socio_sum=439.97, top-decile hits=21/23, public_access=40.49, close_pairs<500m=65, area_coverage=12264819.50, heat_coverage=56659240.96, socio_coverage=46809261.34
+MILP-Heat        : n=50,heat_sum=274.10, socio_sum=197.03,heat_socio_sum=471.14, top-decile hits=23/23, public_access=26.53, close_pairs<500m=79, area_coverage=10980759.94, heat_coverage=58235028.92, socio_coverage=42000694.99
+MILP-Socio       : n=50,heat_sum=210.17, socio_sum=212.18,heat_socio_sum=422.35, top-decile hits=18/23, public_access=25.04, close_pairs<500m=68, area_coverage=11369547.50, heat_coverage=45680308.85, socio_coverage=46360365.52
+MILP-Public      : n=50,heat_sum=4.37, socio_sum=177.69,heat_socio_sum=182.06, top-decile hits=5/23, public_access=62.56, close_pairs<500m=42, area_coverage=14023078.29, heat_coverage=14698296.39, socio_coverage=49987239.00
+MILP-HSP         : n=50,heat_sum=238.08, socio_sum=206.35,heat_socio_sum=444.42, top-decile hits=20/23, public_access=39.70, close_pairs<500m=57, area_coverage=12421935.84, heat_coverage=56660031.66, socio_coverage=49634035.93
+MILP             : n=50,heat_sum=189.81, socio_sum=196.84,heat_socio_sum=386.66, top-decile hits=14/23, public_access=33.56, close_pairs<500m=3, area_coverage=18912760.08, heat_coverage=68989398.30, socio_coverage=71832421.35
+Greedy           : n=50,heat_sum=186.41, socio_sum=195.16,heat_socio_sum=381.57, top-decile hits=13/23, public_access=34.33, close_pairs<500m=4, area_coverage=18788114.69, heat_coverage=66310098.92, socio_coverage=71036106.40
+Random           : n=50,heat_sum=18.42, socio_sum=174.01,heat_socio_sum=192.43, top-decile hits=5/23, public_access=10.53, close_pairs<500m=35, area_coverage=14777455.46, heat_coverage=15087070.15, socio_coverage=50584053.63

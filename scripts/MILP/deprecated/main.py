@@ -1,3 +1,5 @@
+# DISCLAIMER: THIS FILE IS OUTDATED. PLEASE USE MAIN_PARALLEL.PY INSTEAD.
+
 import pandas as pd
 import geopandas as gpd
 import numpy as np
@@ -8,13 +10,11 @@ matplotlib.use("Agg")  # use non-interactive backend
 from pulp import *
 import sys, os
 
-from concurrent.futures import ProcessPoolExecutor
-
 # ensure Python can see your MILP folder
 sys.path.append(os.path.abspath("../"))  # one level up from your notebook
 
 # now import the function
-from MILP.milp import optimize_shade_placement
+from MILP.distance_optimizer import optimize_shade_placement
 from MILP.baselines import (
     select_random,
     select_greedy,
@@ -24,36 +24,17 @@ from MILP.baselines import (
     select_top_by_public,
     select_top_by_heat_socio,
     select_top_by_heat_socio_public,
+    compute_metrics,
 )
-from MILP.plotting_utils import plot_milp_with_key_baselines
-from utils import circle_weighted_join, compute_metrics, parse_args
+from MILP.plotting_utils import plot_milp_with_baselines
 
-args = parse_args()
+# save all figures to results directory
+results_dir = "results"
 
-use_only_major_transit_stops = args.use_only_major_transit_stops
-limit_scope_dtla = args.limit_scope_dtla
-limit_scope_inglewood = args.limit_scope_inglewood
-k_values = args.k_values
-walking_threshold = args.walking_threshold  # meters
-spacing_threshold = walking_threshold * 2  # meters
-public_service_threshold = walking_threshold  # meters
-complex_polygon_intersection = args.complex_polygon_intersection # Whether to intersect shade's full coverage polygon with UCLA Shade layer instead of point-polygon intersection
-weights = {
-            'public': 0.1,
-            'heat': 0.1,
-            'socio': 0.1,
-            'spacing': 1.0,
-        }
-
-# Set up directories to store results
-results_dir = "results_cpi" if complex_polygon_intersection else "results"
-fig_subdir = os.path.join(results_dir, "figures")
-shade_placements_subdir = os.path.join(results_dir, "shade_placements")
-metrics_subdir = os.path.join(results_dir, "metrics")
-os.makedirs(results_dir, exist_ok=True)
-os.makedirs(fig_subdir, exist_ok=True)
-os.makedirs(shade_placements_subdir, exist_ok=True)
-os.makedirs(metrics_subdir, exist_ok=True)
+use_only_major_transit_stops = True
+limit_scope_dtla = True
+limit_scope_inglewood = False
+k_values = [10, 20, 50, 100]
 
 # --- Load LA, DTLA, Inglewood data ---
 bus_stops = gpd.read_file("../../461/data/bus_stops.geojson").to_crs(3857)
@@ -104,31 +85,12 @@ else: # Optimize against all of Los Angeles
     [schools[['geometry']], hospitals[['geometry']], food[['geometry']]],
     ignore_index=True), crs=3857)
 
+
 # --- Combine heat and shade layers with bus stops ---
-if complex_polygon_intersection: # actually intersect the circle coverage of a shade with polygons (more advanced)
-    # First join: heat layer
-    processed_shade_stops = circle_weighted_join(
-        possible_shade_locations,
-        ucla_shade_heat,
-        value_col="heat_layer",    # change to your column name
-        radius=spacing_threshold
-    )
-
-    # Second join: socioeconomic layer
-    processed_shade_stops = circle_weighted_join(
-        processed_shade_stops,
-        ucla_shade_socio,
-        value_col="socioeconomic_layer",    # change to your column name
-        radius=spacing_threshold
-    )
-
-    print(processed_shade_stops.columns)
-
-else: # intersect layers by directly assigning shades the value of the encompassing polygon
-    processed_shade_stops = gpd.sjoin(possible_shade_locations, ucla_shade_heat, how = 'left')
-    processed_shade_stops = processed_shade_stops.drop(columns=['index_right'])
-    processed_shade_stops = gpd.sjoin(processed_shade_stops, ucla_shade_socio, how = 'left')
-    print(processed_shade_stops.columns)
+processed_shade_stops = gpd.sjoin(possible_shade_locations, ucla_shade_heat, how = 'left')
+processed_shade_stops = processed_shade_stops.drop(columns=['index_right'])
+processed_shade_stops = gpd.sjoin(processed_shade_stops, ucla_shade_socio, how = 'left')
+print(processed_shade_stops.columns)
 
 # --- Add together heat and socioeconomic layers to visualize point priority by these 2 objectives
 processed_shade_stops['heat_socio_layer'] = (
@@ -147,105 +109,81 @@ for k in k_values:
     print(f"\n====== Running scenario with k={k} ======")
     num_shades = k
 
-    # --- Run MILP optimizers in parallel ---
-    # --- Define the 5 MILP configs with names ---
-    milp_configs = [
-        ("milp_shades", dict(
-            candidate_points=processed_shade_stops,
-            public_points=public_points,
-            max_shades=k,
-            use_spacing=True,
-            use_public=True,
-            use_heat=True,
-            use_socioeconomic=True,
-            spacing_threshold=spacing_threshold,
-            public_service_threshold=public_service_threshold, 
-            weights=weights,
-        )),
-        ("milp_heat_shades", dict(
-            candidate_points=processed_shade_stops,
-            public_points=public_points,
-            max_shades=k,
-            use_spacing=False,
-            use_public=False,
-            use_heat=True,
-            use_socioeconomic=False,
-            spacing_threshold=spacing_threshold,
-            public_service_threshold=public_service_threshold,
-            weights=weights,
-        )),
-        ("milp_socio_shades", dict(
-            candidate_points=processed_shade_stops,
-            public_points=public_points,
-            max_shades=k,
-            use_spacing=False,
-            use_public=False,
-            use_heat=False,
-            use_socioeconomic=True,
-            spacing_threshold=spacing_threshold,
-            public_service_threshold=public_service_threshold,
-            weights=weights,
-        )),
-        ("milp_public_shades", dict(
-            candidate_points=processed_shade_stops,
-            public_points=public_points,
-            max_shades=k,
-            use_spacing=False,
-            use_public=True,
-            use_heat=False,
-            use_socioeconomic=False,
-            spacing_threshold=spacing_threshold,
-            public_service_threshold=public_service_threshold,
-            weights=weights,
-        )),
-        ("milp_heat_socio_public_shades", dict(
-            candidate_points=processed_shade_stops,
-            public_points=public_points,
-            max_shades=k,
-            use_spacing=False,
-            use_public=True,
-            use_heat=True,
-            use_socioeconomic=True,
-            spacing_threshold=spacing_threshold,
-            public_service_threshold=public_service_threshold,
-            weights=weights,
-        )),
-    ]
+    # --- Run the MILP optimizer ---
+    milp_shades = optimize_shade_placement(
+        candidate_points=processed_shade_stops,
+        public_points=public_points,
+        max_shades=k,
+        use_spacing=True,
+        use_public=True,
+        use_heat=True,
+        use_socioeconomic=True,
+        spacing_threshold=500,
+        public_service_threshold=300,
+    )
 
-    def run_milp(args):
-        return optimize_shade_placement(**args)
+    # --- Baselines ---
+    # MILP Baselines
+    milp_heat_shades = optimize_shade_placement(
+        candidate_points=processed_shade_stops,
+        public_points=public_points,
+        max_shades=k,
+        use_spacing=False,
+        use_public=False,
+        use_heat=True,
+        use_socioeconomic=False,
+        spacing_threshold=500,
+        public_service_threshold=300,
+    )
 
-    # Top-level helper for mapping
-    def run_milp_from_tuple(config_tuple):
-        _, args = config_tuple
-        return run_milp(args)
+    milp_socio_shades = optimize_shade_placement(
+        candidate_points=processed_shade_stops,
+        public_points=public_points,
+        max_shades=k,
+        use_spacing=False,
+        use_public=False,
+        use_heat=False,
+        use_socioeconomic=True,
+        spacing_threshold=500,
+        public_service_threshold=300,
+    )
 
-    # Run jobs concurrently using top-level helper and milp configs
-    with ProcessPoolExecutor(max_workers=5) as executor:
-        results = list(executor.map(run_milp_from_tuple, milp_configs))
+    milp_public_shades = optimize_shade_placement(
+        candidate_points=processed_shade_stops,
+        public_points=public_points,
+        max_shades=k,
+        use_spacing=False,
+        use_public=True,
+        use_heat=False,
+        use_socioeconomic=False,
+        spacing_threshold=500,
+        public_service_threshold=300,
+    )
 
-    milp_results = {name: result for (name, _), result in zip(milp_configs, results)}
-
-    # Access as:
-    milp_shades = milp_results["milp_shades"]
-    milp_heat_shades = milp_results["milp_heat_shades"]
-    milp_socio_shades = milp_results["milp_socio_shades"]
-    milp_public_shades = milp_results["milp_public_shades"]
-    milp_heat_socio_public_shades = milp_results["milp_heat_socio_public_shades"]
+    milp_heat_socio_public_shades = optimize_shade_placement(
+        candidate_points=processed_shade_stops,
+        public_points=public_points,
+        max_shades=k,
+        use_spacing=False,
+        use_public=True,
+        use_heat=True,
+        use_socioeconomic=True,
+        spacing_threshold=500,
+        public_service_threshold=300,
+    )
 
     # Greedy Baselines
     greedy_shades = select_greedy(
         processed_shade_stops,
         public_points,
         k=k,
-        spacing_threshold=spacing_threshold,
-        public_service_threshold=public_service_threshold,
-        weights=weights,
+        spacing_threshold=500,
+        public_service_threshold=300,
     )
     greedy_heat_shades = select_greedy_heat_only(
         processed_shade_stops,
         k=k,
-        spacing_threshold=spacing_threshold,
+        spacing_threshold=500,
     )
 
     # Top-K Baselines
@@ -261,58 +199,87 @@ for k in k_values:
     # Save baseline outputs
     # MILP and MILP Baselines
     milp_shades.to_file(
-        os.path.join(shade_placements_subdir, f"optimized_shades_MILP_{shade_area}_{k}_{walking_threshold}.geojson"), driver="GeoJSON"
+        f"../../data/optimized_shades_MILP_{shade_area}_{k}.geojson", driver="GeoJSON"
     )
+    milp_heat_shades.to_file(
+        f"../../data/optimized_shades_MILPHeat_{shade_area}_{k}.geojson", driver="GeoJSON"
+    )
+    milp_socio_shades.to_file(
+        f"../../data/optimized_shades_MILPSocio_{shade_area}_{k}.geojson", driver="GeoJSON"
+    )
+    milp_public_shades.to_file(
+        f"../../data/optimized_shades_MILPPublic_{shade_area}_{k}.geojson", driver="GeoJSON"
+    )
+    milp_heat_socio_public_shades.to_file(
+        f"../../data/optimized_shades_MILPHeatSocioPublic_{shade_area}_{k}.geojson", driver="GeoJSON"
+    )
+    # Top K Baselines
+    top_heat_shades.to_file(
+        f"../../data/optimized_shades_TopHeat_{shade_area}_{k}.geojson", driver="GeoJSON"
+    )
+    top_socio_shades.to_file(
+        f"../../data/optimized_shades_TopSocio_{shade_area}_{k}.geojson", driver="GeoJSON"
+    )
+    top_public_shades.to_file(
+        f"../../data/optimized_shades_TopPublic_{shade_area}_{k}.geojson", driver="GeoJSON"
+    )
+    top_heat_socio_shades.to_file(
+        f"../../data/optimized_shades_TopHeatSocio_{shade_area}_{k}.geojson", driver="GeoJSON"
+    )
+    top_heat_socio_public_shades.to_file(
+        f"../../data/optimized_shades_TopHeatSocioPublic_{shade_area}_{k}.geojson", driver="GeoJSON"
+    )
+
+    # Greedy Baselines
     greedy_shades.to_file(
-        os.path.join(shade_placements_subdir, f"optimized_shades_Greedy_{shade_area}_{k}_{walking_threshold}.geojson"), driver="GeoJSON"
+        f"../../data/optimized_shades_Greedy_{shade_area}_{k}.geojson", driver="GeoJSON"
     )
+    greedy_heat_shades.to_file(
+        f"../../data/optimized_shades_GreedyHeat_{shade_area}_{k}.geojson", driver="GeoJSON"
+    )
+
+    # Random Baselines
+    random_shades.to_file(
+        f"../../data/optimized_shades_Random_{shade_area}_{k}.geojson", driver="GeoJSON"
+    )
+
     # --- Metrics ---
 
     # MILP
     milp_metrics = compute_metrics(
-        selected=milp_shades,
-        candidates=processed_shade_stops,
-        public_points=public_points,
-        spacing_threshold=spacing_threshold,
-        public_service_threshold=public_service_threshold,
-        ucla_shade_heat=ucla_shade_heat,
-        ucla_shade_socio=ucla_shade_socio,
+        milp_shades,
+        processed_shade_stops,
+        public_points,
+        spacing_threshold=500,
+        public_service_threshold=300,
     )
     milp_heat_metrics = compute_metrics(
         milp_heat_shades,
         processed_shade_stops,
         public_points,
-        spacing_threshold=spacing_threshold,
-        public_service_threshold=public_service_threshold,
-        ucla_shade_heat=ucla_shade_heat,
-        ucla_shade_socio=ucla_shade_socio,
+        spacing_threshold=500,
+        public_service_threshold=300,
     )
     milp_socio_metrics = compute_metrics(
         milp_socio_shades,
         processed_shade_stops,
         public_points,
-        spacing_threshold=spacing_threshold,
-        public_service_threshold=public_service_threshold,
-        ucla_shade_heat=ucla_shade_heat,
-        ucla_shade_socio=ucla_shade_socio,
+        spacing_threshold=500,
+        public_service_threshold=300,
     )
     milp_public_metrics = compute_metrics(
         milp_public_shades,
         processed_shade_stops,
         public_points,
-        spacing_threshold=spacing_threshold,
-        public_service_threshold=public_service_threshold,
-        ucla_shade_heat=ucla_shade_heat,
-        ucla_shade_socio=ucla_shade_socio,
+        spacing_threshold=500,
+        public_service_threshold=300,
     )
     milp_heat_socio_public_metrics = compute_metrics(
         milp_heat_socio_public_shades,
         processed_shade_stops,
         public_points,
-        spacing_threshold=spacing_threshold,
-        public_service_threshold=public_service_threshold,
-        ucla_shade_heat=ucla_shade_heat,
-        ucla_shade_socio=ucla_shade_socio,
+        spacing_threshold=500,
+        public_service_threshold=300,
     )
 
     # Top-K
@@ -320,46 +287,36 @@ for k in k_values:
         top_heat_shades,
         processed_shade_stops,
         public_points,
-        spacing_threshold=spacing_threshold,
-        public_service_threshold=public_service_threshold,
-        ucla_shade_heat=ucla_shade_heat,
-        ucla_shade_socio=ucla_shade_socio,
+        spacing_threshold=500,
+        public_service_threshold=300,
     )
     top_socio_metrics = compute_metrics(
         top_socio_shades,
         processed_shade_stops,
         public_points,
-        spacing_threshold=spacing_threshold,
-        public_service_threshold=public_service_threshold,
-        ucla_shade_heat=ucla_shade_heat,
-        ucla_shade_socio=ucla_shade_socio,
+        spacing_threshold=500,
+        public_service_threshold=300,
     )
     top_public_metrics = compute_metrics(
         top_public_shades,
         processed_shade_stops,
         public_points,
-        spacing_threshold=spacing_threshold,
-        public_service_threshold=public_service_threshold,
-        ucla_shade_heat=ucla_shade_heat,
-        ucla_shade_socio=ucla_shade_socio,
+        spacing_threshold=500,
+        public_service_threshold=300,
     )
     top_heat_socio_metrics = compute_metrics(
         top_heat_socio_shades,
         processed_shade_stops,
         public_points,
-        spacing_threshold=spacing_threshold,
-        public_service_threshold=public_service_threshold,
-        ucla_shade_heat=ucla_shade_heat,
-        ucla_shade_socio=ucla_shade_socio,
+        spacing_threshold=500,
+        public_service_threshold=300,
     )
     top_heat_socio_public_metrics = compute_metrics(
         top_heat_socio_public_shades,
         processed_shade_stops,
         public_points,
-        spacing_threshold=spacing_threshold,
-        public_service_threshold=public_service_threshold,
-        ucla_shade_heat=ucla_shade_heat,
-        ucla_shade_socio=ucla_shade_socio,
+        spacing_threshold=500,
+        public_service_threshold=300,
     )
 
     # Greedy 
@@ -367,29 +324,23 @@ for k in k_values:
         greedy_shades,
         processed_shade_stops,
         public_points,
-        spacing_threshold=spacing_threshold,
-        public_service_threshold=public_service_threshold,
-        ucla_shade_heat=ucla_shade_heat,
-        ucla_shade_socio=ucla_shade_socio,
+        spacing_threshold=500,
+        public_service_threshold=300,
     )
     greedy_heat_metrics = compute_metrics(
         greedy_heat_shades,
         processed_shade_stops,
         public_points,
-        spacing_threshold=spacing_threshold,
-        public_service_threshold=public_service_threshold,
-        ucla_shade_heat=ucla_shade_heat,
-        ucla_shade_socio=ucla_shade_socio,
+        spacing_threshold=500,
+        public_service_threshold=300,
     )
     # Random
     rand_metrics = compute_metrics(
         random_shades,
         processed_shade_stops,
         public_points,
-        spacing_threshold=spacing_threshold,
-        public_service_threshold=public_service_threshold,
-        ucla_shade_heat=ucla_shade_heat,
-        ucla_shade_socio=ucla_shade_socio,
+        spacing_threshold=500,
+        public_service_threshold=300,
     )
 
     def _fmt(m):
@@ -398,50 +349,41 @@ for k in k_values:
             f"heat_sum={m['sum_heat']:.2f}, socio_sum={m['sum_socio']:.2f},"
             f"heat_socio_sum={m['sum_heat_socio']:.2f}, "
             f"top-decile hits={m['top_decile_hits']}/{m['top_decile_total']}, "
-            f"public_access={m['public_access_score']:.2f}, close_pairs<{500}m={m['close_pairs']}, "
-            f"area_coverage={m['area_coverage']:.2f}, "
-            f"heat_coverage={m['heat_coverage']:.2f}, socio_coverage={m['socio_coverage']:.2f}"
+            f"public_access={m['public_access_score']:.2f}, close_pairs<{500}m={m['close_pairs']}"
         )
 
-    # --- Build the metrics string ---
-    metrics_text = "\n=== Comparison Metrics (MILP vs Greedy vs Baselines) ===\n"
-    metrics_text += f"Top-K Heat       : {_fmt(top_heat_metrics)}\n"
-    metrics_text += f"Top-K Socio      : {_fmt(top_socio_metrics)}\n"
-    metrics_text += f"Top-K Public     : {_fmt(top_public_metrics)}\n"
-    metrics_text += f"Top-K HS         : {_fmt(top_heat_socio_metrics)}\n"
-    metrics_text += f"Top-K HSP        : {_fmt(top_heat_socio_public_metrics)}\n"
-    metrics_text += f"MILP-Heat        : {_fmt(milp_heat_metrics)}\n"
-    metrics_text += f"MILP-Socio       : {_fmt(milp_socio_metrics)}\n"
-    metrics_text += f"MILP-Public      : {_fmt(milp_public_metrics)}\n"
-    metrics_text += f"MILP-HSP         : {_fmt(milp_heat_socio_public_metrics)}\n"
-    metrics_text += f"MILP             : {_fmt(milp_metrics)}\n"
-    metrics_text += f"Greedy           : {_fmt(greedy_metrics)}\n"
-    metrics_text += f"Random           : {_fmt(rand_metrics)}\n"
-
-    # --- Print to console ---
-    print(metrics_text)
-
-    # --- Save to file ---
-    out_file_path = os.path.join(metrics_subdir, f"shade_comparison_metrics_{shade_type}_{shade_area}_{num_shades}_{walking_threshold}.txt")
-    with open(out_file_path, "w") as f:
-        f.write(metrics_text)
-
+    print("\n=== Comparison Metrics (MILP vs Greedy vs Baselines) ===")
+    print("Top-K Heat  : ", _fmt(top_heat_metrics))
+    print("Top-K Socio : ", _fmt(top_socio_metrics))
+    print("Top-K Public: ", _fmt(top_public_metrics))
+    print("Top-K HS    : ", _fmt(top_heat_socio_metrics))
+    print("Top-K HSP   : ", _fmt(top_heat_socio_public_metrics))
+    print("MILP-Heat   : ", _fmt(milp_heat_metrics))
+    print("MILP-Socio  : ", _fmt(milp_socio_metrics))
+    print("MILP-Public : ", _fmt(milp_public_metrics))
+    print("MILP-HSP    : ", _fmt(milp_heat_socio_public_metrics))
+    print("MILP        : ", _fmt(milp_metrics))
+    print("Greedy      : ", _fmt(greedy_metrics))
+    print("Greedy-Heat : ", _fmt(greedy_heat_metrics))
+    print("Random      : ", _fmt(rand_metrics))
 
     # --- Visualize Shade Placements for MILP and key baselines on separate plots ---
-    out_file_path = os.path.join(fig_subdir, f"shade_placement_comparison_{shade_type}_{shade_area}_{num_shades}_{walking_threshold}.png")
-    plot_milp_with_key_baselines(
-        milp_heat=milp_heat_shades, 
-        milp_socio=milp_socio_shades, 
-        milp_public=milp_public_shades, 
-        milp_hsp=milp_heat_socio_public_shades, 
-        milp=milp_shades, 
-        greedy=greedy_shades,
-        processed_shade_stops=processed_shade_stops,
-        public_points=public_points,
-        out_file_path=out_file_path)
+    out_file_path = f"shade_placement_comparison_{shade_type}_{shade_area}_{num_shades}.png"
+    plot_milp_with_baselines(
+        milp_heat_shades, 
+        milp_socio_shades, 
+        milp_public_shades, 
+        milp_heat_socio_public_shades, 
+        milp_shades, 
+        top_heat_shades,
+        top_socio_shades,
+        top_public_shades, 
+        top_heat_socio_public_shades,
+        greedy_shades,
+        processed_shade_stops,
+        public_points,
+        out_file_path)
 
-    
-    '''
     # --- Visualize (combined overlay) ---
     fig, axes = plt.subplots(1, 2, figsize=(24, 8))
 
@@ -505,13 +447,11 @@ for k in k_values:
 
     plt.tight_layout()
     plt.savefig(
-        os.path.join(fig_subdir, f"shade_optimization_images_{shade_type}_{shade_area}_{num_shades}_with_baselines.png"),
+        os.path.join(results_dir, f"shade_optimization_images_{shade_type}_{shade_area}_{num_shades}_with_baselines.png"),
         dpi=300,
         bbox_inches='tight',
     )
-    '''
 
-    '''
     # --- Additional Visualization: Separate panels for each strategy (site placements vs public facilities) ---
     fig2, axes2 = plt.subplots(1, 5, figsize=(40, 8))
 
@@ -537,13 +477,11 @@ for k in k_values:
     )
     plt.tight_layout()
     fig2.savefig(
-        os.path.join(fig_subdir, f"shade_optimization_strategies_{shade_type}_{shade_area}_{num_shades}.png"),
+        os.path.join(results_dir, f"shade_optimization_strategies_{shade_type}_{shade_area}_{num_shades}.png"),
         dpi=300,
         bbox_inches='tight',
     )
-    '''
 
-    '''
     # --- Additional Visualization: Heat + Socio Layer comparison MILP vs Greedy ---
     fig3, axes3 = plt.subplots(1, 2, figsize=(16, 8))
     processed_shade_stops.plot(
@@ -569,11 +507,8 @@ for k in k_values:
     axes3[1].legend()
 
     plt.tight_layout()
-    out_visual_file_path = os.path.join(fig_subdir, f"shade_heat_socio_milp_vs_greedy_{shade_type}_{shade_area}_{num_shades}.png")
     fig3.savefig(
-        out_visual_file_path,
+        os.path.join(results_dir, f"shade_heat_socio_milp_vs_greedy_{shade_type}_{shade_area}_{num_shades}.png"),
         dpi=300,
         bbox_inches='tight',
     )
-    print(f"Saved visualizations to {out_visual_file_path}")
-    '''
