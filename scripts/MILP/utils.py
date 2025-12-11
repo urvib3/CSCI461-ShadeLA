@@ -79,26 +79,37 @@ def circle_weighted_join(points_gdf, polygons_gdf, value_col, radius):
     return output
 
 def _compute_distance_matrix(geom: gpd.GeoSeries) -> np.ndarray:
+    # Always project to meters before computing distances
+    if geom.crs != "EPSG:3857":
+        geom = geom.to_crs(3857)
+
     n = len(geom)
     dist = np.zeros((n, n), dtype=float)
-    # Compute upper triangle distances and mirror
+
     for i in range(n):
         gi = geom.iloc[i]
         for j in range(i + 1, n):
             d = gi.distance(geom.iloc[j])
             dist[i, j] = d
             dist[j, i] = d
+
     return dist
 
 
 def _compute_public_dist_matrix(candidates: gpd.GeoDataFrame, public_points: gpd.GeoDataFrame) -> np.ndarray:
+    # Ensure both GeoDataFrames are in EPSG:3857
+    candidates = candidates.to_crs(epsg=3857)
+    public_points = public_points.to_crs(epsg=3857)
+    
     n = len(candidates)
     p = len(public_points)
     public_dists = np.zeros((n, p), dtype=float)
+    
     for i in range(n):
         gi = candidates.geometry.iloc[i]
         for j in range(p):
             public_dists[i, j] = gi.distance(public_points.geometry.iloc[j])
+    
     return public_dists
 
 
